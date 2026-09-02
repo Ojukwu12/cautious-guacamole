@@ -1,0 +1,16 @@
+# Core API Framework
+fastapi==0.110.0
+uvicorn[standard]==0.27.1
+
+# Database & ORM
+asyncpg
+SQLAlchemy
+alembic
+
+# Caching & Background Tasks
+redis==5.0.3
+
+# Security & Authentication
+bcrypt==4.2.1
+python-jose[cryptography]==3.3.0
+python-dotenv==1.0.1
