@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { NavLink, Route, Routes, useNavigate } from 'react-router-dom';
-import { Activity, Copy, CreditCard, KeyRound, Landmark, LogOut, Settings, Smartphone, WalletCards } from 'lucide-react';
+import { Activity, Copy, CreditCard, KeyRound, Landmark, LogOut, Settings, Smartphone, Users, WalletCards } from 'lucide-react';
 import api from '../../api';
 import TransactionDetail from '../TransactionDetail';
 import ProfileView from './ProfileView';
