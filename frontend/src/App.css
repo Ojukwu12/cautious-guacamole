@@ -24,6 +24,9 @@
 .live-rate { display: grid; gap: 5px; padding: 12px; background: #eef5e4; border-radius: 4px; }
 .live-rate span { color: #718077; font: 10px 'DM Mono', monospace; }
 .live-rate strong { color: #365b22; font: 13px 'DM Mono', monospace; overflow-wrap: anywhere; }
+.fee-notice { display: grid; gap: 5px; margin-top: 20px; padding: 13px 14px; background: #fff8e7; border: 1px solid #ead9a6; border-radius: 5px; color: #765719; font-size: 12px; }
+.fee-notice span { color: #8b7445; line-height: 1.5; }
+.checkout-cancel { width: 100%; margin-top: 10px; }
 .profile-coming-soon { margin-top: 28px; padding: 18px; background: #fff8e7; border: 1px solid #ead9a6; border-radius: 5px; }
 .profile-coming-soon h2 { margin: 10px 0; }
 .role-button { margin-left: auto; padding: 8px 10px; font-size: 11px; white-space: nowrap; }

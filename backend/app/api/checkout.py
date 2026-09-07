@@ -104,6 +104,16 @@ async def get_session(session_id: UUID4, db: AsyncSession = Depends(get_db)):
         await db.commit()
     return public_session_response(session)
 
+@router.post("/session/{session_id}/cancel")
+async def cancel_session(session_id: UUID4, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(CheckoutSession).where(CheckoutSession.id == session_id))
+    session = result.scalar_one_or_none()
+    if not session or session.status != "open":
+        raise PaymentProcessingException("This checkout session cannot be cancelled.")
+    session.status = "cancelled"
+    await db.commit()
+    return {"status": "cancelled", "message": "Checkout session cancelled."}
+
 @router.post("/session/{session_id}/pay", status_code=status.HTTP_201_CREATED)
 async def pay_session(session_id: UUID4, payload: PaymentPayload, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(CheckoutSession).where(CheckoutSession.id == session_id))

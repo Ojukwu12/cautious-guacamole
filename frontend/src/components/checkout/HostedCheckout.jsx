@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowRight, Building2, CheckCircle2, CreditCard, Landmark, LockKeyhole, Smartphone } from 'lucide-react';
-import api from '../../api';
+import api, { getApiError } from '../../api';
 
 const methodInfo = {
   card: { label: 'Card', icon: CreditCard },
@@ -13,16 +13,96 @@ const methodInfo = {
 export default function HostedCheckout() {
   const { sessionId } = useParams();
   const navigate = useNavigate();
-  const [session, setSession] = useState(null); const [quote, setQuote] = useState(null); const [instructions, setInstructions] = useState(null); const [method, setMethod] = useState('');
-  const [currency, setCurrency] = useState(''); const [cardBrand, setCardBrand] = useState('visa'); const [outcome, setOutcome] = useState('success'); const [result, setResult] = useState(null); const [error, setError] = useState(''); const [loading, setLoading] = useState(true); const [quoteLoading, setQuoteLoading] = useState(false); const [paying, setPaying] = useState(false);
-  useEffect(() => { api.get(`/checkout/session/${sessionId}`).then(({ data }) => { setSession(data); setMethod(data.payment_options[0]); setCurrency(data.fiat_currency); }).catch(e => setError(e.response?.data?.detail || 'This payment link is unavailable.')).finally(() => setLoading(false)); }, [sessionId]);
-  useEffect(() => { if (!method || !session) return; api.get(`/checkout/session/${sessionId}/payment-instructions/${method}`).then(({ data }) => setInstructions(data)).catch(() => setInstructions(null)); }, [sessionId, method, session]);
-  useEffect(() => { if (!currency) return; setQuoteLoading(true); api.get(`/checkout/session/${sessionId}/quote/${currency}`).then(({ data }) => setQuote(data)).catch(e => setError(e.response?.data?.detail || 'Could not resolve this currency.')).finally(() => setQuoteLoading(false)); }, [sessionId, currency]);
-  useEffect(() => { if (!result) return; const timer = window.setTimeout(() => navigate('/dashboard'), 5 * 60 * 1000); return () => window.clearTimeout(timer); }, [result, navigate]);
-  async function pay() { setPaying(true); setError(''); try { const { data } = await api.post(`/checkout/session/${sessionId}/pay`, { payment_method: method, payment_currency: currency, simulation_outcome: outcome, card_brand: method === 'card' ? cardBrand : null }); setResult(data); } catch (e) { setError(e.response?.data?.detail || 'Payment could not be completed.'); } finally { setPaying(false); } }
+  const [session, setSession] = useState(null);
+  const [quote, setQuote] = useState(null);
+  const [instructions, setInstructions] = useState(null);
+  const [method, setMethod] = useState('');
+  const [currency, setCurrency] = useState('');
+  const [cardBrand, setCardBrand] = useState('visa');
+  const [outcome, setOutcome] = useState('success');
+  const [result, setResult] = useState(null);
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [quoteLoading, setQuoteLoading] = useState(false);
+  const [paying, setPaying] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
+
+  useEffect(() => {
+    api.get(`/checkout/session/${sessionId}`)
+      .then(({ data }) => {
+        setSession(data);
+        setMethod(data.payment_options[0]);
+        setCurrency(data.fiat_currency);
+      })
+      .catch(errorResponse => setError(getApiError(errorResponse, 'This payment link is unavailable.')))
+      .finally(() => setLoading(false));
+  }, [sessionId]);
+
+  useEffect(() => {
+    if (!method || !session) return;
+    api.get(`/checkout/session/${sessionId}/payment-instructions/${method}`)
+      .then(({ data }) => setInstructions(data))
+      .catch(() => setInstructions(null));
+  }, [sessionId, method, session]);
+
+  useEffect(() => {
+    if (!currency) return;
+    setQuoteLoading(true);
+    api.get(`/checkout/session/${sessionId}/quote/${currency}`)
+      .then(({ data }) => setQuote(data))
+      .catch(errorResponse => setError(getApiError(errorResponse, 'Could not resolve this currency.')))
+      .finally(() => setQuoteLoading(false));
+  }, [sessionId, currency]);
+
+  useEffect(() => {
+    if (!result) return;
+    const timer = window.setTimeout(() => navigate('/dashboard'), 5 * 60 * 1000);
+    return () => window.clearTimeout(timer);
+  }, [result, navigate]);
+
+  async function pay() {
+    setPaying(true);
+    setError('');
+    try {
+      const { data } = await api.post(`/checkout/session/${sessionId}/pay`, {
+        payment_method: method,
+        payment_currency: currency,
+        simulation_outcome: outcome,
+        card_brand: method === 'card' ? cardBrand : null,
+      });
+      setResult(data);
+    } catch (errorResponse) {
+      setError(getApiError(errorResponse, 'Payment could not be completed.'));
+    } finally {
+      setPaying(false);
+    }
+  }
+
+  async function cancelCheckout() {
+    setCancelling(true);
+    setError('');
+    try {
+      await api.post(`/checkout/session/${sessionId}/cancel`);
+      navigate(-1);
+    } catch (errorResponse) {
+      setError(getApiError(errorResponse, 'This checkout session could not be cancelled.'));
+    } finally {
+      setCancelling(false);
+    }
+  }
+
   if (loading) return <main className="checkout-shell"><p className="muted">Resolving secure payment session...</p></main>;
   if (error && !session) return <main className="checkout-shell"><section className="checkout-panel"><p className="eyebrow">VERVE GATE / CHECKOUT</p><h1>Link unavailable</h1><p className="muted">{error}</p></section></main>;
-  if (result) return <main className="checkout-shell"><section className={`checkout-panel ${result.status === 'success' ? 'success-panel' : 'failure-panel'}`}><CheckCircle2 size={42}/><p className="eyebrow">TEST PAYMENT {result.status === 'success' ? 'CONFIRMED' : 'FAILED'}</p><h1>{result.status === 'success' ? 'Payment simulated.' : 'Payment declined.'}</h1><p className="muted">{result.status === 'success' ? `Transaction ${result.transaction_id.slice(0, 12)}... is locked into the prototype ledger.` : result.message}</p>{result.status === 'success' && <div className="receipt"><span>Customer paid</span><strong>{Number(result.payment_amount).toLocaleString()} {result.payment_currency}</strong><small>Payment method: {methodInfo[result.payment_method]?.label || result.payment_method}</small></div>}{result.status === 'failed' && <div className="receipt"><span>Attempted amount</span><strong>{Number(result.payment_amount).toLocaleString()} {result.payment_currency}</strong><small>No ledger entry was created.</small></div>}<button className="primary-button full-button" onClick={() => navigate('/dashboard')}>Return to dashboard now</button><p className="redirect-note">Automatically returning to dashboard in 5 minutes.</p></section></main>;
-  const details = method === 'card' ? <div><div className="card-brand-grid"><button type="button" className={`card-test ${cardBrand === 'visa' ? 'selected' : ''}`} onClick={() => setCardBrand('visa')}><strong>VISA</strong><span>4242 4242 4242 4242</span><small>12/30 · 123</small></button><button type="button" className={`card-test ${cardBrand === 'mastercard' ? 'selected' : ''}`} onClick={() => setCardBrand('mastercard')}><strong>MASTERCARD</strong><span>5555 5555 5555 4444</span><small>12/30 · 123</small></button></div><p className="instruction-note">Test card details only. No real card data is accepted or stored.</p></div> : instructions?.kind === 'bank' ? <div className="instruction-grid"><span>Demo bank</span><strong>{instructions.bank_name}</strong><span>Account name</span><strong>{instructions.account_name}</strong><span>Account number</span><strong>{instructions.account_number}</strong><span>Reference</span><strong>{instructions.reference}</strong></div> : instructions?.kind === 'crypto' ? <div className="instruction-grid"><span>Asset / network</span><strong>{instructions.asset} / {instructions.network}</strong><span>Mock address</span><code>{instructions.address}</code></div> : <div className="instruction-note">{instructions?.instruction}</div>;
-    return <main className="checkout-shell"><section className="checkout-panel"><div className="checkout-brand"><span>VG</span><span>Verve Gate</span><LockKeyhole size={16}/></div><p className="eyebrow">LIVE-RATE TEST CHECKOUT</p><h1>{session.fiat_amount.toLocaleString()} {session.fiat_currency}</h1><p className="muted">The merchant requested this amount. Choose your payment currency and mock payment rail.</p><label className="currency-picker">I want to pay in<select value={currency} onChange={e => setCurrency(e.target.value)}>{session.supported_payment_currencies.map(item => <option key={item} value={item}>{item}</option>)}</select></label><div className="conversion-panel"><div><span>Conversion rate</span><strong>1 {session.fiat_currency} = {quoteLoading ? '...' : `${quote?.rate} ${currency}`}</strong></div><ArrowRight size={18}/><div><span>Final amount to pay</span><strong>{quoteLoading ? 'Resolving...' : `${quote?.payment_amount?.toLocaleString()} ${currency}`}</strong></div></div><p className="rate-note">Mock oracle quote · amount is based on the merchant’s original price</p><div className="method-grid">{session.payment_options.map(option => { const Item = methodInfo[option] || methodInfo.card; const Icon = Item.icon; return <button type="button" className={`method-choice ${method === option ? 'selected' : ''}`} key={option} onClick={() => setMethod(option)}><Icon size={18}/><span>{Item.label}</span></button>; })}</div><div className="payment-instructions">{details}</div><label className="outcome-picker">Simulation result<select value={outcome} onChange={e => setOutcome(e.target.value)}><option value="success">Success</option><option value="failure">Failure</option></select></label>{error && <p className="form-error">{error}</p>}<button className="primary-button full-button" onClick={pay} disabled={paying || quoteLoading}>{paying ? 'Simulating payment...' : `Pay ${quote?.payment_amount?.toLocaleString() || '...'} ${currency}`}</button><small className="secure-note">Test environment · no real funds or financial accounts are used</small></section></main>;
+
+  if (result) return <main className="checkout-shell"><section className={`checkout-panel ${result.status === 'success' ? 'success-panel' : 'failure-panel'}`}><CheckCircle2 size={42} /><p className="eyebrow">TEST PAYMENT {result.status === 'success' ? 'CONFIRMED' : 'FAILED'}</p><h1>{result.status === 'success' ? 'Payment simulated.' : 'Payment declined.'}</h1><p className="muted">{result.status === 'success' ? `Transaction ${result.transaction_id.slice(0, 12)}... is locked into the prototype ledger.` : result.message}</p>{result.status === 'success' && <div className="receipt"><span>Customer paid</span><strong>{Number(result.payment_amount).toLocaleString()} {result.payment_currency}</strong><small>Includes the 3% Verve Gate platform fee.</small><small>Payment method: {methodInfo[result.payment_method]?.label || result.payment_method}</small></div>}{result.status === 'failed' && <div className="receipt"><span>Attempted amount</span><strong>{Number(result.payment_amount).toLocaleString()} {result.payment_currency}</strong><small>No ledger entry was created.</small></div>}<button className="primary-button full-button" onClick={() => navigate('/dashboard')}>Return to dashboard now</button><p className="redirect-note">Automatically returning to dashboard in 5 minutes.</p></section></main>;
+
+  const details = method === 'card'
+    ? <div><div className="card-brand-grid"><button type="button" className={`card-test ${cardBrand === 'visa' ? 'selected' : ''}`} onClick={() => setCardBrand('visa')}><strong>VISA</strong><span>4242 4242 4242 4242</span><small>12/30 · 123</small></button><button type="button" className={`card-test ${cardBrand === 'mastercard' ? 'selected' : ''}`} onClick={() => setCardBrand('mastercard')}><strong>MASTERCARD</strong><span>5555 5555 5555 4444</span><small>12/30 · 123</small></button></div><p className="instruction-note">Test card details only. No real card data is accepted or stored.</p></div>
+    : instructions?.kind === 'bank'
+      ? <div className="instruction-grid"><span>Demo bank</span><strong>{instructions.bank_name}</strong><span>Account name</span><strong>{instructions.account_name}</strong><span>Account number</span><strong>{instructions.account_number}</strong><span>Reference</span><strong>{instructions.reference}</strong></div>
+      : instructions?.kind === 'crypto'
+        ? <div className="instruction-grid"><span>Asset / network</span><strong>{instructions.asset} / {instructions.network}</strong><span>Mock address</span><code>{instructions.address}</code></div>
+        : <div className="instruction-note">{instructions?.instruction}</div>;
+
+  return <main className="checkout-shell"><section className="checkout-panel"><div className="checkout-brand"><span>VG</span><span>Verve Gate</span><LockKeyhole size={16} /></div><p className="eyebrow">LIVE-RATE TEST CHECKOUT</p><h1>{session.fiat_amount.toLocaleString()} {session.fiat_currency}</h1><p className="muted">The merchant requested this amount. Choose your payment currency and mock payment rail.</p><div className="fee-notice"><strong>3% platform fee applies</strong><span>This fee covers rate movement and is included in the final customer amount.</span></div><label className="currency-picker">I want to pay in<select value={currency} onChange={event => setCurrency(event.target.value)}>{session.supported_payment_currencies.map(item => <option key={item} value={item}>{item}</option>)}</select></label><div className="conversion-panel"><div><span>Conversion rate</span><strong>1 {session.fiat_currency} = {quoteLoading ? '...' : `${quote?.rate} ${currency}`}</strong></div><ArrowRight size={18} /><div><span>Final amount including fee</span><strong>{quoteLoading ? 'Resolving...' : `${quote?.payment_amount?.toLocaleString()} ${currency}`}</strong></div></div><p className="rate-note">Live provider quote · customer total includes the 3% platform fee</p><div className="method-grid">{session.payment_options.map(option => { const Item = methodInfo[option] || methodInfo.card; const Icon = Item.icon; return <button type="button" className={`method-choice ${method === option ? 'selected' : ''}`} key={option} onClick={() => setMethod(option)}><Icon size={18} /><span>{Item.label}</span></button>; })}</div><div className="payment-instructions">{details}</div><label className="outcome-picker">Simulation result<select value={outcome} onChange={event => setOutcome(event.target.value)}><option value="success">Success</option><option value="failure">Failure</option></select></label>{error && <p className="form-error" role="alert">{error}</p>}<button className="primary-button full-button" onClick={pay} disabled={paying || cancelling || quoteLoading}>{paying ? 'Simulating payment...' : `Pay ${quote?.payment_amount?.toLocaleString() || '...'} ${currency}`}</button><button className="secondary-button checkout-cancel" onClick={cancelCheckout} disabled={paying || cancelling}>{cancelling ? 'Cancelling...' : 'Back and cancel transaction'}</button><small className="secure-note">Test environment · no real funds or financial accounts are used</small></section></main>;
 }
