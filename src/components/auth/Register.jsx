@@ -9,7 +9,13 @@ export default function Register() {
   const [loading, setLoading] = useState(false);
   async function submit(event) {
     event.preventDefault(); setLoading(true); setError('');
-    try { await api.post('/auth/register', form); navigate('/login'); }
+    try {
+      const { data } = await api.post('/auth/register', form);
+      localStorage.setItem('vg_access_token', data.access_token);
+      localStorage.setItem('vg_role', data.role || 'merchant');
+      window.dispatchEvent(new Event('vg-auth-changed'));
+      navigate('/dashboard');
+    }
     catch (err) { setError(err.response?.data?.detail || 'Unable to create account.'); }
     finally { setLoading(false); }
   }

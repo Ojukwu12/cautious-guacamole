@@ -13,7 +13,9 @@ export default function Login() {
     try {
       const { data } = await api.post('/auth/login', form);
       localStorage.setItem('vg_access_token', data.access_token);
-      navigate('/dashboard');
+      localStorage.setItem('vg_role', data.role || 'merchant');
+      window.dispatchEvent(new Event('vg-auth-changed'));
+      navigate(data.role === 'admin' ? '/admin' : '/dashboard');
     } catch (err) { setError(err.response?.data?.detail || 'Unable to sign in.'); }
     finally { setLoading(false); }
   }
