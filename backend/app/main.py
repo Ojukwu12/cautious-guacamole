@@ -7,6 +7,7 @@ from app.db.connection import engine
 from app.api.checkout import router as checkout_router
 from app.api.auth import router as auth_router
 from app.api.admin import router as admin_router
+from app.core.config import settings
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -30,7 +31,7 @@ app = FastAPI(
 # Configure CORS for the React Frontend (supports Vite on 5173 and standard 3000)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://localhost:5173"],
+    allow_origins=settings.CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
