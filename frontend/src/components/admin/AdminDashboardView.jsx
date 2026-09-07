@@ -12,6 +12,7 @@ export default function AdminDashboardView() {
   const [deletingId, setDeletingId] = useState('');
   const [search, setSearch] = useState('');
   const [transactions, setTransactions] = useState([]);
+  const [users, setUsers] = useState([]);
   const [selectedTransaction, setSelectedTransaction] = useState(null);
 
   useEffect(() => {
@@ -21,6 +22,7 @@ export default function AdminDashboardView() {
         setTransactions(response.data.transactions);
       })
       .catch(err => setError(err.response?.data?.detail || 'Administrator access is required.'));
+    api.get('/admin/users').then(response => setUsers(response.data.data)).catch(() => setUsers([]));
   }, []);
 
   useEffect(() => {
@@ -52,6 +54,15 @@ export default function AdminDashboardView() {
     } finally {
       setDeletingId('');
     }
+  }
+
+  async function updateRole(user) {
+    const nextRole = user.role === 'admin' ? 'merchant' : 'admin';
+    if (!window.confirm(`${nextRole === 'admin' ? 'Promote' : 'Demote'} ${user.email} to ${nextRole}?`)) return;
+    try {
+      await api.patch(`/admin/users/${user.id}/role`, { role: nextRole });
+      setUsers(current => current.map(item => item.id === user.id ? { ...item, role: nextRole } : item));
+    } catch (err) { setActionError(err.response?.data?.detail || 'User role could not be updated.'); }
   }
 
   function signOut() {
@@ -91,9 +102,12 @@ export default function AdminDashboardView() {
           <div className={`system-status ${data.system_status?.conversion?.real_time ? 'status-good' : 'status-demo'}`}><CheckCircle2 size={18} /><div><strong>Asset conversion</strong><span>{data.system_status?.conversion?.real_time ? 'Live market rates active' : 'Deterministic mock rates active'}</span></div></div>
           <div className={`system-status ${data.system_status?.ledger_hashing?.active ? 'status-good' : 'status-alert'}`}><ShieldCheck size={18} /><div><strong>Hashed ledger</strong><span>{data.system_status?.ledger_hashing?.active ? `${data.system_status.ledger_hashing.records_checked} record(s) verified` : 'Verification needs attention'}</span></div></div>
         </section>
+        <section className="surface live-rates-panel"><div className="surface-title"><div><p className="eyebrow">LIVE RATE FEED</p><h2>Current rates against USD</h2><p className="muted">Fetched from the configured market-rate provider and cached briefly for checkout quotes.</p></div></div>{data.live_rates?.length ? <div className="live-rates-grid">{data.live_rates.map(rate => <div className="live-rate" key={rate.currency}><span>{rate.currency}</span><strong>{Number(rate.per_usd).toLocaleString(undefined, { maximumSignificantDigits: 8 })}</strong></div>)}</div> : <p className="muted empty-state">Live rates are currently unavailable.</p>}</section>
         {actionError && <p className="form-error" role="alert">{actionError}</p>}
         <section className="content-grid">
           <div className="surface">
+            <div className="surface-title"><div><p className="eyebrow">USERS</p><h2>Accounts and roles</h2></div></div>
+            {users.length ? <div className="ledger-list">{users.map(user => <div className="ledger-row merchant-row" key={user.id}><span className="ledger-mark">●</span><div><strong>{user.email}</strong><small>{user.role} · {new Date(user.created_at).toLocaleDateString()}</small></div><button className="secondary-button role-button" onClick={() => updateRole(user)}>{user.role === 'admin' ? 'Demote' : 'Make admin'}</button></div>)}</div> : <p className="muted empty-state">No users registered.</p>}
             <div className="surface-title"><div><p className="eyebrow">MERCHANTS</p><h2>Recent merchant accounts</h2></div></div>
             {data.merchants.length ? <div className="ledger-list">{data.merchants.map(merchant => <div className="ledger-row merchant-row" key={merchant.id}><span className="ledger-mark">●</span><div><strong>{merchant.email}</strong><small>Settlement: {merchant.settlement_asset} · {new Date(merchant.created_at).toLocaleDateString()}</small></div><button className="icon-button danger-button" title="Delete merchant" aria-label={`Delete ${merchant.email}`} disabled={deletingId === merchant.id} onClick={() => deleteMerchant(merchant)}><Trash2 size={16} /></button></div>)}</div> : <p className="muted empty-state">No merchants registered.</p>}
           </div>

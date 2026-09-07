@@ -1,14 +1,20 @@
 from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel, UUID4
 from sqlalchemy import cast, delete, func, or_, String
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
 from app.core.security import get_current_admin
+from app.core.config import settings
 from app.db.connection import get_db
 from app.db.models import CheckoutSession, TransactionLedger, User, Withdrawal
 from app.services.ledger_hash import GENESIS_HASH
+from app.services.conversion import fetch_live_usd_rates
 
 router = APIRouter(prefix="/api/admin", tags=["Administration"])
+
+class RolePayload(BaseModel):
+    role: str
 
 def transaction_result(transaction):
     return {
@@ -20,6 +26,9 @@ def transaction_result(transaction):
         "payment_method": transaction.payment_method,
         "status": transaction.status,
         "settlement_value": transaction.settlement_value,
+        "platform_fee_percentage": transaction.platform_fee_percentage,
+        "platform_fee_value": transaction.platform_fee_value,
+        "customer_total": transaction.customer_total,
         "current_hash": transaction.current_hash,
         "previous_hash": transaction.previous_hash,
         "created_at": transaction.created_at,
@@ -36,6 +45,7 @@ async def admin_overview(admin: User = Depends(get_current_admin), db: AsyncSess
         .group_by(TransactionLedger.currency)
         .order_by(TransactionLedger.currency.asc())
     )
+    live_rates = await fetch_live_usd_rates()
     recent_merchants = await db.execute(
         select(User).where(User.role == "merchant").order_by(User.created_at.desc()).limit(10)
     )
@@ -73,6 +83,11 @@ async def admin_overview(admin: User = Depends(get_current_admin), db: AsyncSess
             {"currency": currency, "amount": float(amount or 0)}
             for currency, amount in volume_result.all()
         ],
+        "live_rates": [
+            {"currency": currency, "per_usd": rate}
+            for currency, rate in sorted((live_rates or {}).items())
+            if currency != "USD"
+        ],
         "merchants": [
             {"id": str(user.id), "email": user.email, "settlement_asset": user.settlement_asset, "created_at": user.created_at}
             for user in recent_merchants.scalars().all()
@@ -88,9 +103,11 @@ async def admin_overview(admin: User = Depends(get_current_admin), db: AsyncSess
         "system_status": {
             "conversion": {
                 "active": True,
-                "real_time": False,
-                "mode": "deterministic_mock",
-                "message": "Conversion is active using the configured deterministic rate table.",
+                "real_time": settings.LIVE_RATES_ENABLED,
+                "mode": "live_provider" if settings.LIVE_RATES_ENABLED else "disabled",
+                "message": "Conversion is active using the configured live rate provider."
+                if settings.LIVE_RATES_ENABLED
+                else "Live conversion is disabled.",
             },
             "ledger_hashing": {
                 "active": hashes_valid and chain_starts_at_genesis and chain_links_valid,
@@ -127,6 +144,29 @@ async def delete_merchant(merchant_id: str, admin: User = Depends(get_current_ad
     await db.delete(merchant)
     await db.commit()
     return {"status": "success", "message": "Merchant account deleted.", "merchant_id": merchant_id}
+
+@router.get("/users")
+async def list_users(admin: User = Depends(get_current_admin), db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(User).order_by(User.created_at.desc()))
+    return {"status": "success", "data": [{"id": str(user.id), "email": user.email, "role": user.role, "created_at": user.created_at} for user in result.scalars().all()]}
+
+@router.patch("/users/{user_id}/role")
+async def update_user_role(user_id: UUID4, payload: RolePayload, admin: User = Depends(get_current_admin), db: AsyncSession = Depends(get_db)):
+    if payload.role not in {"admin", "merchant"}:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Role must be admin or merchant.")
+    if str(admin.id) == str(user_id) and payload.role != "admin":
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="You cannot demote your own administrator account.")
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User account not found.")
+    if str(user.role) == "admin" and payload.role == "merchant":
+        admin_count = await db.scalar(select(func.count(User.id)).where(User.role == "admin"))
+        if (admin_count or 0) <= 1:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="The platform must retain at least one administrator.")
+    setattr(user, "role", payload.role)
+    await db.commit()
+    return {"status": "success", "user_id": str(user.id), "role": user.role}
 
 @router.get("/transactions/search")
 async def search_transactions(query: str, admin: User = Depends(get_current_admin), db: AsyncSession = Depends(get_db)):

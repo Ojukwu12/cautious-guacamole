@@ -21,6 +21,16 @@ class User(Base):
     payment_options = Column(JSON, default=lambda: ["card", "bank_transfer", "bank_app", "crypto"])
     created_at = Column(DateTime, default=datetime.now)
 
+class PasswordResetToken(Base):
+    __tablename__ = "password_reset_tokens"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    token_hash = Column(String(128), unique=True, nullable=False)
+    expires_at = Column(DateTime, nullable=False)
+    used_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.now)
+
 class Withdrawal(Base):
     __tablename__ = "withdrawals"
 
@@ -41,6 +51,9 @@ class TransactionLedger(Base):
     fiat_amount = Column(Float, nullable=False)
     currency = Column(String(20), nullable=False)
     settlement_value = Column(Float, nullable=False)
+    platform_fee_percentage = Column(Float, nullable=False, default=3.0)
+    platform_fee_value = Column(Float, nullable=False, default=0.0)
+    customer_total = Column(Float, nullable=False, default=0.0)
     payment_currency = Column(String(10), nullable=True)
     payment_amount = Column(Float, nullable=True)
     payment_method = Column(String(30), nullable=True)
@@ -61,6 +74,9 @@ class CheckoutSession(Base):
     fiat_currency = Column(String(3), nullable=False)
     settlement_asset = Column(String(20), nullable=False)
     exchange_rate = Column(Float, nullable=False)
+    platform_fee_percentage = Column(Float, nullable=False, default=3.0)
+    platform_fee_value = Column(Float, nullable=False, default=0.0)
+    customer_total = Column(Float, nullable=False, default=0.0)
     quote_id = Column(String(64), nullable=False)
     payment_options = Column(JSON, nullable=False)
     status = Column(String(20), default="open", nullable=False)

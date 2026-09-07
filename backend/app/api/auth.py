@@ -1,18 +1,22 @@
 import secrets
 import logging
+import hashlib
+from datetime import datetime, timedelta
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from pydantic import BaseModel, EmailStr
 
 from app.db.connection import get_db
-from app.db.models import User
+from app.db.models import PasswordResetToken, User
 from app.core.security import get_password_hash, verify_password, create_access_token, get_current_user
+from app.core.config import settings
 from app.exceptions.custom_exceptions import (
     DuplicateEmailException, 
     InvalidCredentialsException, 
     DatabaseOperationException
 )
+from app.services.email import send_password_reset_email
 
 router = APIRouter(
     prefix="/api/auth",
@@ -26,6 +30,13 @@ class MerchantRegister(BaseModel):
 
 class MerchantLogin(BaseModel):
     email: EmailStr
+    password: str
+
+class PasswordResetRequest(BaseModel):
+    email: EmailStr
+
+class PasswordResetPayload(BaseModel):
+    token: str
     password: str
 
 class SettlementSettings(BaseModel):
@@ -107,6 +118,47 @@ async def login_merchant(payload: MerchantLogin, db: AsyncSession = Depends(get_
         await db.rollback()
         logger.exception("Merchant login failed", exc_info=e)
         raise DatabaseOperationException("Login could not be completed. Please try again.")
+
+@router.post("/password-reset/request")
+async def request_password_reset(payload: PasswordResetRequest, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(User).where(User.email == payload.email))
+    user = result.scalar_one_or_none()
+    if user:
+        raw_token = secrets.token_urlsafe(32)
+        token = PasswordResetToken(
+            user_id=user.id,
+            token_hash=hashlib.sha256(raw_token.encode()).hexdigest(),
+            expires_at=datetime.utcnow() + timedelta(minutes=settings.PASSWORD_RESET_TTL_MINUTES),
+        )
+        db.add(token)
+        await db.commit()
+        await send_password_reset_email(
+            str(user.email),
+            f"{settings.FRONTEND_URL.rstrip('/')}/reset-password?token={raw_token}",
+        )
+    return {"status": "success", "message": "If that email is registered, a password reset link has been sent."}
+
+@router.post("/password-reset/confirm")
+async def confirm_password_reset(payload: PasswordResetPayload, db: AsyncSession = Depends(get_db)):
+    token_hash = hashlib.sha256(payload.token.encode()).hexdigest()
+    result = await db.execute(
+        select(PasswordResetToken).where(
+            PasswordResetToken.token_hash == token_hash,
+            PasswordResetToken.used_at.is_(None),
+            PasswordResetToken.expires_at > datetime.utcnow(),
+        )
+    )
+    reset_token = result.scalar_one_or_none()
+    if not reset_token or len(payload.password) < 8:
+        raise InvalidCredentialsException()
+    user_result = await db.execute(select(User).where(User.id == reset_token.user_id))
+    user = user_result.scalar_one_or_none()
+    if not user:
+        raise InvalidCredentialsException()
+    setattr(user, "password_hash", get_password_hash(payload.password))
+    setattr(reset_token, "used_at", datetime.utcnow())
+    await db.commit()
+    return {"status": "success", "message": "Password reset successfully. You can now sign in."}
 
 @router.get("/me")
 async def get_profile(user=Depends(get_current_user)):

@@ -4,6 +4,9 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 // We will build these components next
 import Login from './components/auth/Login';
 import Register from './components/auth/Register';
+import ForgotPassword from './components/auth/ForgotPassword';
+import ResetPassword from './components/auth/ResetPassword';
+import Docs from './components/Docs';
 import DashboardLayout from './components/dashboard/DashboardLayout';
 import HostedCheckout from './components/checkout/HostedCheckout';
 import AdminDashboard from './components/admin/AdminDashboardView';
@@ -35,6 +38,9 @@ function App() {
         {/* Public Authentication Routes */}
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
+        <Route path="/forgot-password" element={<ForgotPassword />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
+        <Route path="/docs" element={<Docs />} />
 
         {/* The Decoupled Customer Checkout Page (External Facing) */}
         <Route path="/pay/:sessionId" element={<HostedCheckout />} />

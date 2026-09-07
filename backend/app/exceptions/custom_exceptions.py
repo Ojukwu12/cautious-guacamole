@@ -38,3 +38,10 @@ class PaymentProcessingException(VerveGateException):
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Payment processing failed: {message}"
         )
+
+class RateProviderException(VerveGateException):
+    def __init__(self):
+        super().__init__(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Live conversion rates are temporarily unavailable. Please try again shortly.",
+        )
