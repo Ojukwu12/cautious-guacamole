@@ -8,6 +8,26 @@ from typing import cast
 # Initialize Redis with a short 2-second timeout
 redis_client = redis.Redis(host='localhost', port=6379, db=0, decode_responses=True, socket_connect_timeout=2)
 
+SUPPORTED_PAYMENT_CURRENCIES = ["USD", "NGN", "GHS", "EUR", "GBP", "BTC", "ETH", "USDT"]
+UNITS_PER_USD = {
+    "USD": 1.0, "NGN": 1500.0, "GHS": 15.0, "EUR": 0.92,
+    "GBP": 0.78, "BTC": 0.000015, "ETH": 0.0004, "USDT": 1.0,
+}
+
+def get_customer_quote(amount: float, source_currency: str, payment_currency: str) -> dict | None:
+    source = source_currency.upper()
+    target = payment_currency.upper()
+    if source not in UNITS_PER_USD or target not in UNITS_PER_USD:
+        return None
+    rate = UNITS_PER_USD[target] / UNITS_PER_USD[source]
+    return {
+        "source_currency": source,
+        "payment_currency": target,
+        "rate": round(rate, 10),
+        "payment_amount": round(amount * rate, 8),
+        "quote_source": "Verve Gate deterministic prototype oracle",
+    }
+
 def fetch_raw_market_rate(currency_pair: str) -> float:
     mock_rates = {
         "USD_NGN": 1500.00, "GBP_NGN": 1900.00, "EUR_NGN": 1650.00,
@@ -19,7 +39,7 @@ def fetch_raw_market_rate(currency_pair: str) -> float:
     return mock_rates.get(currency_pair, 1.0)
 
 def get_secured_exchange_rate(currency_pair: str, spread_percentage: float = 1.5) -> dict:
-    cache_key = f"rate:{currency_pair}"
+    cache_key = f"rate:{currency_pair}:{spread_percentage}"
     
     # 1. Try to check Redis for an unexpired cached rate
     try:

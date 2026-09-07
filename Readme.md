@@ -20,6 +20,16 @@ The API runs on `http://localhost:8000` and the Vite app on `http://localhost:51
 - Customers open `/pay/{session_id}` and confirm payment without receiving merchant credentials.
 - `GET /api/checkout/history` returns only the authenticated merchant's ledger entries.
 
+### Prototype administrator
+
+Admin accounts are not created through public signup. Register a normal account, then promote it in PostgreSQL for local demonstration:
+
+```sql
+UPDATE users SET role = 'admin' WHERE email = 'admin@example.com';
+```
+
+Sign in through the same `/login` page; admin users are routed to `/admin` and can view aggregate merchant, transaction, session, and withdrawal activity. The hosted checkout collects no customer name, email, address, or other identity data; the integrating shopping platform owns that information.
+
 Exchange rates are deterministic mock rates in `backend/app/services/conversion.py`, making the prototype reliable offline and easy to replace with a licensed provider later. Webhook events are signed with HMAC-SHA256 and include bounded retry metadata, but `webhook_worker.py` only simulates delivery and never calls an external endpoint.
 
 Copy `frontend/.env.example` to `frontend/.env` and set `VITE_API_BASE_URL` to change the API origin. The default is `http://localhost:8000/api`.

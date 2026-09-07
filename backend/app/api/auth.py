@@ -29,6 +29,7 @@ class MerchantLogin(BaseModel):
 class SettlementSettings(BaseModel):
     settlement_asset: str
     webhook_url: str | None = None
+    payment_options: list[str] = ["card", "bank_transfer", "bank_app", "crypto"]
 
 @router.post("/register", status_code=status.HTTP_201_CREATED)
 async def register_merchant(payload: MerchantRegister, db: AsyncSession = Depends(get_db)):
@@ -55,13 +56,17 @@ async def register_merchant(payload: MerchantRegister, db: AsyncSession = Depend
         db.add(new_merchant)
         await db.commit()
         await db.refresh(new_merchant)
+        access_token = create_access_token(data={"sub": str(new_merchant.id), "role": new_merchant.role})
 
         return {
             "status": "success",
             "message": "Merchant registered successfully.",
             "merchant_id": str(new_merchant.id),
             "api_key": new_api_key,
-            "email": new_merchant.email
+            "email": new_merchant.email,
+            "access_token": access_token,
+            "token_type": "bearer",
+            "role": new_merchant.role,
         }
 
     except DuplicateEmailException as de:
@@ -89,7 +94,8 @@ async def login_merchant(payload: MerchantLogin, db: AsyncSession = Depends(get_
             "status": "success",
             "access_token": access_token,
             "token_type": "bearer",
-            "merchant_id": str(user.id)
+            "merchant_id": str(user.id),
+            "role": user.role,
         }
 
     except InvalidCredentialsException as ice:
@@ -101,15 +107,18 @@ async def login_merchant(payload: MerchantLogin, db: AsyncSession = Depends(get_
 async def get_profile(user=Depends(get_current_user)):
     return {
         "merchant_id": str(user.id),
+        "role": user.role,
         "email": user.email,
         "api_key": user.api_key,
         "settlement_asset": user.settlement_asset,
         "webhook_url": user.webhook_url,
+        "payment_options": user.payment_options or [],
     }
 
 @router.patch("/settings")
 async def update_settings(payload: SettlementSettings, user=Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     user.settlement_asset = payload.settlement_asset.upper()
     user.webhook_url = payload.webhook_url
+    user.payment_options = payload.payment_options
     await db.commit()
-    return {"status": "success", "settlement_asset": user.settlement_asset, "webhook_url": user.webhook_url}
+    return {"status": "success", "settlement_asset": user.settlement_asset, "webhook_url": user.webhook_url, "payment_options": user.payment_options}
