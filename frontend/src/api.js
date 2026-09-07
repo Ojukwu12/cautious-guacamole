@@ -1,5 +1,10 @@
 import axios from 'axios';
 
+const configuredApiUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api';
+const apiBaseUrl = configuredApiUrl.replace(/\/+$/, '').endsWith('/api')
+  ? configuredApiUrl.replace(/\/+$/, '')
+  : `${configuredApiUrl.replace(/\/+$/, '')}/api`;
+
 export function getApiError(error, fallback = 'Something went wrong. Please try again.') {
   const detail = error?.response?.data?.detail;
   if (Array.isArray(detail)) return detail.map(item => item?.msg || 'Invalid input.').join(' ');
@@ -11,7 +16,7 @@ export function getApiError(error, fallback = 'Something went wrong. Please try 
 }
 
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api',
+  baseURL: apiBaseUrl,
 });
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('vg_access_token');
