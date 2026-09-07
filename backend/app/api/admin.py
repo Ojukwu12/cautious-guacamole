@@ -31,6 +31,11 @@ async def admin_overview(admin: User = Depends(get_current_admin), db: AsyncSess
     session_count = await db.scalar(select(func.count(CheckoutSession.id)))
     transaction_count = await db.scalar(select(func.count(TransactionLedger.tx_id)))
     withdrawal_count = await db.scalar(select(func.count(Withdrawal.id)))
+    volume_result = await db.execute(
+        select(TransactionLedger.currency, func.sum(TransactionLedger.settlement_value))
+        .group_by(TransactionLedger.currency)
+        .order_by(TransactionLedger.currency.asc())
+    )
     recent_merchants = await db.execute(
         select(User).where(User.role == "merchant").order_by(User.created_at.desc()).limit(10)
     )
@@ -64,6 +69,10 @@ async def admin_overview(admin: User = Depends(get_current_admin), db: AsyncSess
             "transactions": transaction_count or 0,
             "withdrawals": withdrawal_count or 0,
         },
+        "transaction_volume": [
+            {"currency": currency, "amount": float(amount or 0)}
+            for currency, amount in volume_result.all()
+        ],
         "merchants": [
             {"id": str(user.id), "email": user.email, "settlement_asset": user.settlement_asset, "created_at": user.created_at}
             for user in recent_merchants.scalars().all()

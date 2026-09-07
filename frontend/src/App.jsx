@@ -6,7 +6,7 @@ import Login from './components/auth/Login';
 import Register from './components/auth/Register';
 import DashboardLayout from './components/dashboard/DashboardLayout';
 import HostedCheckout from './components/checkout/HostedCheckout';
-import AdminDashboard from './components/admin/AdminDashboard';
+import AdminDashboard from './components/admin/AdminDashboardView';
 import NotFound from './components/NotFound';
 import './App.css';
 
