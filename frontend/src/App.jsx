@@ -7,6 +7,7 @@ import Register from './components/auth/Register';
 import DashboardLayout from './components/dashboard/DashboardLayout';
 import HostedCheckout from './components/checkout/HostedCheckout';
 import AdminDashboard from './components/admin/AdminDashboard';
+import NotFound from './components/NotFound';
 import './App.css';
 
 function App() {
@@ -46,7 +47,7 @@ function App() {
         <Route path="/admin/*" element={isAuthenticated && role === 'admin' ? <AdminDashboard /> : <Navigate to={isAuthenticated ? '/dashboard' : '/login'} />} />
 
         {/* Default Redirect */}
-        <Route path="*" element={<Navigate to={isAuthenticated ? (role === 'admin' ? '/admin' : '/dashboard') : '/login'} />} />
+        <Route path="*" element={<NotFound isAuthenticated={isAuthenticated} role={role} />} />
       </Routes>
     </Router>
   );

@@ -1,4 +1,5 @@
 import secrets
+import logging
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
@@ -17,6 +18,7 @@ router = APIRouter(
     prefix="/api/auth",
     tags=["Merchant Authentication"]
 )
+logger = logging.getLogger(__name__)
 
 class MerchantRegister(BaseModel):
     email: EmailStr
@@ -73,7 +75,8 @@ async def register_merchant(payload: MerchantRegister, db: AsyncSession = Depend
         raise de
     except Exception as e:
         await db.rollback()
-        raise DatabaseOperationException(f"Registration failed: {str(e)}")
+        logger.exception("Merchant registration failed", exc_info=e)
+        raise DatabaseOperationException("Registration could not be completed. Please try again.")
 
 @router.post("/login")
 async def login_merchant(payload: MerchantLogin, db: AsyncSession = Depends(get_db)):
@@ -101,7 +104,9 @@ async def login_merchant(payload: MerchantLogin, db: AsyncSession = Depends(get_
     except InvalidCredentialsException as ice:
         raise ice
     except Exception as e:
-        raise DatabaseOperationException(f"Login processing failed: {str(e)}")
+        await db.rollback()
+        logger.exception("Merchant login failed", exc_info=e)
+        raise DatabaseOperationException("Login could not be completed. Please try again.")
 
 @router.get("/me")
 async def get_profile(user=Depends(get_current_user)):
